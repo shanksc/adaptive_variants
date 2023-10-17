@@ -2,17 +2,14 @@
 #fix formatting 
 #need other ~20 marine species.
 DATASETS=['46-Haliotis']
+#number of lines per chunk 
+#increase this for full dataset, it's better to have larger files if possible.
+LINES_PER_CHUNK=2000
 
 rule all:
-    #temporary
     input:
-        #expand("{dataset}/{dataset}.clean.random.SNPS", dataset=DATASETS),
-        #expand("{dataset}/{dataset}.MATRIX.OUT", dataset=DATASETS),
-        #expand("{dataset}/{dataset}.ENVS", dataset=DATASETS)
-        #expand("{dataset}/{dataset}.MATRIX", dataset=DATASETS)
-        #expand("{dataset}/snp_files", dataset=DATASETS)
-        expand("{dataset}/snp_bfs.all", dataset=DATASETS)
-        #expand("{dataset}/snp_files", dataset=DATASETS, glob)
+        #expand("{dataset}/snp_files/", dataset=DATASETS),
+        expand("{dataset}/all_snps.bfs", dataset=DATASETS)
 
 #also add a rule for creating populations s.t. they're just individuals
 rule create_populations_by_latitude:
@@ -49,6 +46,7 @@ rule prune_vcf:
         #"{dataset}/{dataset}.pruned.vcf.gz"
         "{dataset}/{dataset}_annotated_pruned_0.6.vcf.gz"
     #shell:
+        #the F_MISSING filter removed few
         #"bcftools filter --threads 16 -O z --exclude 'F_MISSING>0.25' {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz > {wildcards.dataset}/{wildcards.dataset}.pruned.vcf.gz"
         #"bcftools query --output-type z -f'%AF\n' --exclude 'INFO/AF < 0.1' 46-Haliotis/46-Haliotis_clean_snps.vcf.gz > 46-Haliotis/46-Haliotis_pruned.vcf.gz"
 
@@ -112,6 +110,7 @@ rule create_random_sample:
         #REMEMBER TO CHANGE K
         "python3 scripts/random_sample.py --SNPS {wildcards.dataset}/{wildcards.dataset}.clean.SNPS --k 10000 --o {wildcards.dataset}/{wildcards.dataset}.clean.random"
 
+''''
 rule build_covar:
     input:
         "{dataset}/{dataset}.clean.random.SNPS"
@@ -121,7 +120,7 @@ rule build_covar:
     shell:
         "./bayenv -i {wildcards.dataset}/{wildcards.dataset}.clean.random.SNPS -p $(ls -1 {wildcards.dataset}/populations | wc -l)"
         " -k 10000 > {wildcards.dataset}/{wildcards.dataset}.MATRIX.OUT"
-    
+
 #get last n lines to define covariance matrix 
 rule final_matrix:
     input:
@@ -130,47 +129,73 @@ rule final_matrix:
         "{dataset}/{dataset}.MATRIX"
     shell:
         "sed '$d' {wildcards.dataset}/{wildcards.dataset}.MATRIX.OUT | tail -n $(ls -1 {wildcards.dataset}/populations | wc -l) > {wildcards.dataset}/{wildcards.dataset}.MATRIX"
+'''
 
-#CHANGE EVERY RULE BELOW THIS TO USE ANNOTATED PRUNED SNPS
-#split snps file into individual snp files
-rule split_SNPS:
+checkpoint prep_bayenv:
     input:
-        #for now just use a smaller example
-        #"{dataset}/{dataset}.clean.random.SNPS"
-        "{dataset}/{dataset}_annotated_pruned_0.6.vcf.gz"
+        "{dataset}/{dataset}.MATRIX",
+        "{dataset}/{dataset}.ENVS",
+        "{dataset}/{dataset}.clean.random.SNPS",
+        #"{dataset}/{dataset}.clean.SNPS"
+    output:
+        "{dataset}/bayenv_ready.txt"
+    shell:
+        "echo 'ready' > {wildcards.dataset}/bayenv_ready.txt"
+
+
+#split into chunks of N lines
+#split snps file into chunks
+#make this that this maintains order
+#test with .random for now
+#before we create chunks lets require that bayenv is ready
+checkpoint create_SNPS_chunks:
+    input:
+        "{dataset}/{dataset}.clean.random.SNPS",
+        "{dataset}/bayenv_ready.txt"
     output:
         directory("{dataset}/snp_files/")
     shell:
         """
+        rm {wildcards.dataset}/bayenv_ready.txt
         mkdir {wildcards.dataset}/snp_files/
-        split -d -l 2 {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz {wildcards.dataset}/snp_files/
+        split --additional-suffix=.SNPS -d --lines={LINES_PER_CHUNK} {wildcards.dataset}/{wildcards.dataset}.clean.random.SNPS {wildcards.dataset}/snp_files/chunk_
+        """  
+#this maybe could just use a glob? see if it works
+from pathlib import Path
+def get_snps(wc):
+    chk_output= checkpoints.create_SNPS_chunks.get(**wc).output[0]
+    out = Path(chk_output).glob("*.SNPS")
+    ns = []
+    for f in out:
+        s = f.name.replace(".SNPS","").split("_")[1]
+        ns.append(s)
+    fs = expand("{{dataset}}/snp_files/chunk_{n}.SNPS", n=ns)
+
+    return ns
+#split snps file into individual snp files
+checkpoint split_SNPS_chunk:
+    input:
+        #for now just use a smaller example
+        #"{dataset}/{dataset}.clean.random.SNPS"
+        "{dataset}/snp_files/chunk_{n}.SNPS"
+        
+    output: 
+        directory("{dataset}/snp_files/chunk_{n}_snps/")
+    shell: 
+        """
+        mkdir {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/
+        split --additional-suffix=.SNP -d -l 2 {wildcards.dataset}/snp_files/chunk_{wildcards.n}.SNPS {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/
+        #now we can remove chunk since we have directory of individual snps
+        rm {wildcards.dataset}/snp_files/chunk_{wildcards.n}.SNPS
         """
 
-#memoize allele counts for each SNP s.t. that we're not just recomputing what we've already computed 
-#we need to split up SNPS into individal SNP files, then run separately. Before running we check if we've already computed
-#the same SNP in terms of the counts. We need this feature eventually anyways, even if its not very effective for LD
-#filtered vcfs
-rule prep_bayenv:
-    input:
-        "{dataset}/snp_files/",
-        "{dataset}/{dataset}.MATRIX",
-        "{dataset}/{dataset}.ENVS"
-    output:
-        directory("{dataset}/snp_bfs/")
-    shell:
-        "mkdir {wildcards.dataset}/snp_bfs"
 
-
-#rule for individual SNP files
-rule run_bayenv:
+rule run_bayenv_on_snp:
     input:
-        "{dataset}/snp_files/{n}",
-        "{dataset}/snp_bfs/",
-        "{dataset}/{dataset}.MATRIX",
-        "{dataset}/{dataset}.ENVS"
+        "{dataset}/snp_files/chunk_{n}_snps/{snp}.SNP"
     output:
-        "{dataset}/snp_bfs/{n}.bf"
-    
+        "{dataset}/snp_files/chunk_{n}_snps/{snp}.bf"
+
     #compute each snp file and then remove them 
     #we would add the memoization here in some form - we could just have some hashmap locally
     #would need to handle access from each snakemake rule, could maybe be slow
@@ -178,39 +203,99 @@ rule run_bayenv:
     
     #CHANGE -n PARAMETER WHEN WE ADD MORE ENV VARS, should be -n 3 if we're using coldest and warmest month
     shell:
-        "./bayenv -i {wildcards.dataset}/snp_files/{wildcards.n} -m {wildcards.dataset}/{wildcards.dataset}.MATRIX"
+        "./bayenv -i {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/{wildcards.snp}.SNP -m {wildcards.dataset}/{wildcards.dataset}.MATRIX"
         " -e {wildcards.dataset}/{wildcards.dataset}.ENVS"
         " -p $(ls -1 {wildcards.dataset}/populations | wc -l)"
-        " -k 10000 -n 3 -t"
-        #have to use -o otherwise it segfaults, likely some environmental variable
-        " -o {wildcards.dataset}/snp_bfs/{wildcards.n}"
+        #setting an explicit seed
+        " -k 10000 -n 3 -r 4536 -t"
+        #have to use -o otherwise it segfaults, likely some environmental variable causing this in bayenv
+        #.bf extension is added by bayenv
+        " -o {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/{wildcards.snp}"
+        #error handling
+        """
+        exitcode=$?
+        if [ $exitcode -eq 1 ]
+        then   
+            #this printf would need to be changed for different number of environmental variables
+            #create a placeholder bf - this problem might be random seed related, in which case we might just want to re-run
+            #we can't produce bfs with 0s, so this is a fine placeholder value for bayenv failing. 
+            printf '{wildcards.snp}\t0\t0\t0\n' > {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/{wildcards.snp}.bf
+            exit 0
+        else
+            exit 0
+        fi
+        """
 
-def find_snp_files(wildcards):
-    #ns = glob_wildcards("{wildcards.dataset}/snp_files/{n}")
-    ns = glob_wildcards(f"{wildcards.dataset}/snp_files/{{n}}").n
-    #with open(f'{wildcards.dataset}/snp_files_names.txt', 'w') as f:
-    #    for n in ns:
-    #        f.write(n+'\n')
-    return expand(f"{wildcards.dataset}/snp_bfs/{{n}}.bf", n=ns)
+def get_chunk_bfs(wildcards):
+    checkpoint_output = checkpoints.split_SNPS_chunk.get(**wildcards).output[0]
+    snps = glob_wildcards(f"{wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/{{snp}}.SNP").snp
+    #return expand(f"")
+    return expand(f"{wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/{{snp}}.bf", snp=snps)
 
-#calculate bayes factors using bayenv for all snps 
-#we can remove temporary snp_files dir here
-rule calc_bfs:
+
+#input will call apply_bayenv_to_chunk
+rule run_by_chunk:
     input:
-        "{dataset}/snp_bfs/",
-        "{dataset}/snp_files/",
-        #this returns an expansion
-        find_snp_files
+        #note that this expansion is limited to all the snp files within the given chunk/dataset
+        get_chunk_bfs
     output:
-        "{dataset}/snp_bfs.all"
-    #remove this probably
-    benchmark:
-        "{dataset}/calc_bfs.benchmark.txt"
+        "{dataset}/snp_files/chunk_{n}.bfs"
     shell:
-        #rm -r {wildcards.dataset}/snp_files
-        #"echo 'snps_bfs done' > {wildcards.dataset}/snp_bfs.done.txt"
-        "cat {wildcards.dataset}/snp_bfs/* > {wildcards.dataset}/snp_bfs.all"
-        "rm -r {wildcards.dataset}/snp_files/"
-        #"rm -r {wildcards.dataset}"
+        """
+        #combine bfs files into one and delete rest
+        cat {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/*.bf > {wildcards.dataset}/snp_files/chunk_{wildcards.n}.bfs 
+        #now delete all the individual files
+        rm -r {wildcards.dataset}/snp_files/chunk_{wildcards.n}_snps/
+        """
+
+#ensure that chunk_n_snps directories have been made before run_all_chunks
+def get_all_chunks_snps(wildcards):
+    ns = glob_wildcards(f"{wildcards.dataset}/snp_files/chunk_{{n}}").n
+    #checkpoint_output = checkpoints.chunks
+    #return expand(f"{wildcards.dataset}/snp_files/chunk_{{n}}_snps/", n=ns)
+    return expand(f"{wildcards.dataset}/snp_files/chunk_{{n}}_snps", n=ns)
 
 
+#don't need this anymore
+'''
+checkpoint prep_chunks:
+    input:
+        get_all_chunks_snps,
+        "{dataset}/chunks_ready.txt",
+    output:
+        "{dataset}/chunks_ready.txt"
+    shell:
+        "echo 'ready' > {wildcards.dataset}/chunks_ready.txt"
+'''
+
+def get_all_chunks_bfs(wildcards):
+    # checkpoint_output = checkpoints.split_SNPS_chunk.get(**wildcards)
+    ns = get_snps(wildcards)
+    #print(ns)    # ns = glob_wildcards(f"{wildcards.dataset}/snp_files/chunk_{{n}}_snps/").n
+    # ns = Path(f"{widlcards.dataset}/snp_files/chunk_{n}_snps/")
+    #checkpoint_output = checkpoints.
+    #with open('chunks_seen.txt', 'w') as f: 
+    #    for n in ns:
+    #        f.write(f'{n}\n')
+    # ns=range(10)
+    return expand("{dataset}/snp_files/chunk_{n}.bfs", dataset=wildcards.dataset, n=ns)
+
+    
+#this will require everything we want as input
+rule run_all_chunks:
+    input:
+        #this needs to be an expansion
+        #"{dataset}/snp_files/chunk_{n}_snps/all.bfs"
+        # "{dataset}/chunks_ready.txt",
+        get_all_chunks_bfs
+    output:
+        #combine all chunks into single file 
+        "{dataset}/all_snps.bfs"
+    shell:
+        #this final all_snps.bfs should be same order and length as clean.INFO and clean.SNPS
+        """
+        cat {wildcards.dataset}/snp_files/*.bfs > {wildcards.dataset}/all_snps.bfs
+        #remove everything that we don't need 
+        rm -r {wildcards.dataset}/snp_files/
+        #rm {wildcards.dataset}/chunks_ready.txt
+        """
