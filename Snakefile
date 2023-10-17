@@ -4,7 +4,7 @@
 DATASETS=['46-Haliotis']
 #number of lines per chunk 
 #increase this for full dataset, it's better to have larger files if possible.
-LINES_PER_CHUNK=2000
+LINES_PER_CHUNK=1000
 
 rule all:
     input:
