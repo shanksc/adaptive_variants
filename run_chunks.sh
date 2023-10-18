@@ -12,7 +12,7 @@ do
         #declare $file_name=$(basename $n)
         eval file_name=$(basename $n)
         eval file_name_without_ext=${file_name%.*}
-        snakemake -s run_chunk.smk --quiet="all" --cores 64 --scheduler "greedy" --rerun-incomplete --config chunk=$file_name_without_ext dataset=$dataset > ${dataset}/${file_name_without_ext}.out
+        #snakemake -s run_chunk.smk --quiet="all" --cores 64 --scheduler "greedy" --rerun-incomplete --config chunk=$file_name_without_ext dataset=$dataset > ${dataset}/${file_name_without_ext}.out
     done 
     #combine the bfs into 1 
     cat ${dataset}/snp_files/*.bfs > ${dataset}/snps.bfs
