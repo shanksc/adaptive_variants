@@ -111,9 +111,8 @@ rule create_random_sample:
         "{dataset}/{dataset}.clean.random.SNPS"
     shell:
         #REMEMBER TO CHANGE K
-        "python3 scripts/random_sample.py --SNPS {wildcards.dataset}/{wildcards.dataset}.clean.SNPS --k 10000 --o {wildcards.dataset}/{wildcards.dataset}.clean.random"
-
-
+        "python3 scripts/random_sample.py --SNPS {wildcards.dataset}/{wildcards.dataset}.clean.SNPS --k 100000 --o {wildcards.dataset}/{wildcards.dataset}.clean.random"
+'''
 rule build_covar:
     input:
         "{dataset}/{dataset}.clean.random.SNPS"
@@ -133,7 +132,7 @@ rule final_matrix:
     shell:
         "sed '$d' {wildcards.dataset}/{wildcards.dataset}.MATRIX.OUT | tail -n $(ls -1 {wildcards.dataset}/populations | wc -l) > {wildcards.dataset}/{wildcards.dataset}.MATRIX"
 
-
+'''
 checkpoint prep_bayenv:
     input:
         "{dataset}/{dataset}.MATRIX",
@@ -149,7 +148,7 @@ checkpoint prep_bayenv:
 #before we create chunks lets require that bayenv is ready
 checkpoint create_SNPS_chunks:
     input:
-        "{dataset}/{dataset}.clean.SNPS",
+        "{dataset}/{dataset}.clean.random.SNPS",
         "{dataset}/bayenv_ready.txt"
     output:
         directory("{dataset}/snp_files/")
@@ -158,7 +157,7 @@ checkpoint create_SNPS_chunks:
         rm {wildcards.dataset}/bayenv_ready.txt
         mkdir {wildcards.dataset}/snp_files/
         #mkdir {wildcards.dataset}/snp_bfs/
-        split --additional-suffix=.SNPS -d --lines={LINES_PER_CHUNK} {wildcards.dataset}/{wildcards.dataset}.clean.SNPS {wildcards.dataset}/snp_files/chunk_
+        split --additional-suffix=.SNPS -d --lines={LINES_PER_CHUNK} {wildcards.dataset}/{wildcards.dataset}.clean.random.SNPS {wildcards.dataset}/snp_files/chunk_
         """
 
 

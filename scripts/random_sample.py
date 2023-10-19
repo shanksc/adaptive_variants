@@ -40,7 +40,7 @@ def write_random_sample(line_pairs, k, out):
             f.write(line_pair[1])
     
     #we want to write out indicies so we can map back to clean.INFO files
-    with open(out+'.indicies', 'w') as f:
+    with open(out+'.indices', 'w') as f:
         for idx, _ in sample:
             f.write(f'{idx}\n')
 
