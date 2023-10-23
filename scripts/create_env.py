@@ -48,7 +48,7 @@ def write_out(vars, out):
             standardize(vars[i])
             line = ''
             for n in vars[i][:-1]:
-                line += f'{n}\t'
+                line += f'{n} '
             f.write(line+f'{vars[i][-1]}\n')
 
 
