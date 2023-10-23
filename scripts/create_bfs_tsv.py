@@ -50,6 +50,7 @@ def get_info(info_file, indices):
 
     return info
 
+
 def get_indices(indicies_file):
 
     indicies = []
@@ -86,7 +87,6 @@ def get_bfs(bfs_file, env_labels):
 def main():
     args = get_args()
     #print(args.env_labels)
-    qualified_contigs = get_qualified_contigs(args.contig_sizes, args.min_contig_size)
     indices = get_indices(args.indices)
     label_to_bfs = get_bfs(args.bfs, args.env_labels)
     info = get_info(args.info, indices)
@@ -119,7 +119,9 @@ def main():
     df = pd.DataFrame.from_dict(df_dict)
     
     #now filter on qualified contigs
-    df = df[df.chromosome.isin(qualified_contigs)]
+    if args.contig_sizes is not None:
+        qualified_contigs = get_qualified_contigs(args.contig_sizes, args.min_contig_size)
+        df = df[df.chromosome.isin(qualified_contigs)]
 
     df.to_csv(path_or_buf=args.o, sep='\t', index=False)
     
