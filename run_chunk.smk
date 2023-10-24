@@ -5,15 +5,17 @@ print(DATASET)
 print(CHUNK)
 rule all:
     input:
-        expand("{dataset}_baypass/snp_files/{chunk}_summary_betai_reg.out", dataset=DATASET, chunk=CHUNK)
+        expand("{dataset}/snp_files/{chunk}_summary_betai_reg.out", dataset=DATASET, chunk=CHUNK)
 
 rule run_baypass:
     input:
-        "{dataset}_baypass/snp_files/{chunk}.SNPS"
+        "{dataset}/snp_files/{chunk}.SNPS",
+        "{dataset}/{dataset}.random_mat_omega.out"
     output:
-        "{dataset}_baypass/snp_files/{chunk}_summary_betai_reg.out"
+        "{dataset}/snp_files/{chunk}_summary_betai_reg.out"
     shell:
         "./g_baypass" 
-        " -gfile {wildcards.dataset}_baypass/snp_files/{wildcards.chunk}.SNPS"
-        " -efile {wildcards.dataset}_baypass/{wildcards.dataset}.ENVS -nthreads 64"
+        " -gfile {wildcards.dataset}/snp_files/{wildcards.chunk}.SNPS"
+        " -efile {wildcards.dataset}/{wildcards.dataset}.ENVS -nthreads 64"
+        " -omegafile {wildcards.dataset}/{wildcards.dataset}.random_mat_omega.out"
         " -outprefix {wildcards.dataset}/snp_files/{wildcards.chunk}"
