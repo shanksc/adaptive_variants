@@ -7,17 +7,17 @@ for dataset in "46-Haliotis"
 do
     echo $dataset
     #make sure that snp_files contains only the chunks
-    #for n in ${dataset}/snp_files/*.SNPS
+    for n in ${dataset}/snp_files/*.SNPS
     #for n in ${dataset}/snp_files/chunk_00.SNPS
-    #do  
-    #    echo $n
+    do  
+        echo $n
         #declare $file_name=$(basename $n)
-    #    eval file_name=$(basename $n)
-    #    eval file_name_without_ext=${file_name%.*}
-    #    snakemake -s run_chunk.smk --cores 1 --quiet all --rerun-incomplete --config chunk=$file_name_without_ext dataset=$dataset >> ${dataset}.out.txt
+        eval file_name=$(basename $n)
+        eval file_name_without_ext=${file_name%.*}
+        snakemake -s run_chunk.smk --cores 1 --quiet all --rerun-incomplete --config chunk=$file_name_without_ext dataset=$dataset >> ${dataset}.out.txt
         #/usr/bin/time -o ${dataset}/snp_files/${file_name_without_ext}.time ./g_baypass -gfile $n -efile ${dataset}/46-Haliotis.ENVS -nthreads 64 -outprefix ${dataset}/snp_files/${file_name_without_ext} > ${dataset}/${file_name_without_ext}.out
         #snakemake -s run_chunk.smk --quiet "all" --cores 64 --scheduler "greedy" --rerun-incomplete --config chunk=$file_name_without_ext dataset=$dataset > ${dataset}/${file_name_without_ext}.out
-    #done 
+    done 
     #combine the bfs into 1 
     #cat ${dataset}/snp_files/*.bfs > ${dataset}/snps.bfs
     #summary_counts=$(ls -1 ${dataset}/snp_files/*summary_betai_reg.out | wc -l)
