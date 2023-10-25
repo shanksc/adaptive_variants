@@ -1,1 +1,1 @@
-# finding adaptive variants with baypass
+# finding adaptive variants with BayPass

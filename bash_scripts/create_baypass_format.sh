@@ -29,7 +29,8 @@ wait
 
 #write info file
 #this could change depending on what information we want down the line
-bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\n' $2 > $3.INFO 
+#added -H parameter to add header
+bcftools query -H -f'%CHROM\t%POS\t%REF\t%ALT\n' $2 > $3.INFO 
 
 #combine temp files into tsv 
 #paste $(ls $1 | grep temp | sed "s_.*_${1}/&_" | tr '\n' ' ') | column -t -s $'\t' > $3.SNPS
