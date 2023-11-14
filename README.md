@@ -4,7 +4,7 @@ Snakemake workflows and scripts for running BayPass. See [here](https://forgemia
 
 The workflow begins with `prep_chunks.smk`. Note that this requires a VCF file and the coordinates for all the samples in a directory. This creates all the needed files before running BayPass on all the SNPs.
 
-Once this is done, running `run_chunks.sh` iterates through all the chunks and applies `run_chunk.smk` to each one. Once BayPass has been run on each chunk, `run_chunks.sh` will also assemble a large TSV of many variables for each SNP.
+Once this is done, running `run_chunks.sh` iterates through all the chunks and applies `run_chunk.smk` to each one. Once BayPass has been run on each chunk, `run_chunks.sh` will also assemble a large TSV of many variables of each SNP.
 
 This TSV can be passed to `scripts/plot_manhattan.py` to plot all the Bayes factors. 
 
