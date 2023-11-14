@@ -15,7 +15,10 @@ def parse_coords(coords_file):
         next(f)
         for line in f.readlines():
             sample, long, lat = line.strip().split()
+            #handle samples without coordinates
             lat = round(float(lat))
+            if lat == 0.0:
+                continue
             if lat in coords:
                 coords[lat].append(sample)
             else:

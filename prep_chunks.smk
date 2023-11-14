@@ -1,10 +1,10 @@
 
-#fix formatting 
-#need other ~20 marine species.
+
 
 #in the future we probably want to utilize the config to extend our options
-DATASETS=['46-Haliotis']
-#with baypass we are building a covariance matrix for each chunk, which is fine as long as they are similar?
+#DATASETS=['46-Haliotis']
+DATASETS=['73-Haliotis']
+#how to many lines per chunk 
 LINES_PER_CHUNK=50000
 
 rule all:
@@ -13,7 +13,7 @@ rule all:
         expand("{dataset}/{dataset}.ENVS", dataset=DATASETS),
         expand("{dataset}/snp_files", dataset=DATASETS)
 
-#also add a rule for creating populations s.t. they're just individuals
+#add creating a txt containing samples per population ie just save the .intersect files we produce temporarly 
 rule create_populations_by_latitude:
     input:
         "{dataset}/{dataset}.coords.txt"
@@ -27,43 +27,30 @@ rule create_populations_by_latitude:
          --o {wildcards.dataset}/populations/{wildcards.dataset} \
          && echo 'done' > {wildcards.dataset}/{wildcards.dataset}.done.txt 
         """
-#this might be entirely redundant if we're just using done.txt
-#wait for populations to be done
-checkpoint wait_for_pops:
+
+#calculate the allele freqs for each population we create. 
+rule get_AF_by_population:
     input:
         "{dataset}/{dataset}.done.txt"
     output:
-        "{dataset}/{dataset}.num_pops.txt"
+        "{dataset}/{dataset}.AF.tsv"
     shell:
-        #wouldn't be a bad idea to remove the done.txt
-        "ls -1 {wildcards.dataset}/populations/ | wc -l > {wildcards.dataset}/{wildcards.dataset}.num_pops.txt"
+        """
+        bash bash_scripts/get_AF_for_population.sh {wildcards.dataset}/populations/ {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz {wildcards.dataset}/{wildcards.dataset}.AF.tsv
+        """
 
-
-#filtering on chrom for now
-#we need a more stringent pruning of the vcf 
-#for now just use pruned LD vcf 
+#placeholder for further filtering of vcf in future 
 rule prune_vcf:
     input:
-        #prune again
         "{dataset}/{dataset}_annotated_pruned_0.6.vcf.gz"
     output:
-        #"46-Haliotis/46-Haliotis_pruned.vcf.gz"
-        #"{dataset}/{dataset}_pruned.vcf.gz"
-        #"{dataset}/{dataset}.JAJLRC010000004.1.vcf.gz"
         "{dataset}/{dataset}_annotated_pruned_0.6.vcf.gz"
     #shell:
-        #the F_MISSING filter removed few
-        #"""
-        #bcftools index {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz -t -o {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz.tbi --threads 32
-        #bcftools view {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz --regions JAJLRC010000004.1 > {wildcards.dataset}/{wildcards.dataset}.JAJLRC010000004.1.vcf.gz --threads 32
-        #"""
-        #"bcftools filter --threads 32 -O z --exclude '%CHROM!=JAJLRC010000004.1' {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz > {wildcards.dataset}/{wildcards.dataset}.JAJLRC010000004.1.vcf.gz"
-        #"bcftools query --output-type z -f'%AF\n' --exclude 'INFO/AF < 0.1' 46-Haliotis/46-Haliotis_clean_snps.vcf.gz > 46-Haliotis/46-Haliotis_pruned.vcf.gz"
 
-#may need a rule to further separate vcfs by chromosom
+#convert vcf to baypass format 
 rule vcf_to_baypass:
     input:
-        "{dataset}/{dataset}.num_pops.txt",
+        "{dataset}/{dataset}.done.txt",
         "{dataset}/{dataset}_annotated_pruned_0.6.vcf.gz"
     output:
         "{dataset}/{dataset}.SNPS",
@@ -72,7 +59,8 @@ rule vcf_to_baypass:
         #"ls {wildcards.dataset}/populations/ | grep temp| sed 's_.*_{wildcards.dataset}/populations/&_' > out.txt"
         "bash bash_scripts/create_baypass_format.sh {wildcards.dataset}/populations/ {wildcards.dataset}/{wildcards.dataset}_annotated_pruned_0.6.vcf.gz {wildcards.dataset}/{wildcards.dataset}"
 
-#Don't think we need this for baypass, easy to re-implement though in the case that we do need it 
+#Don't think we need this for baypass, easy to re-implement though in the case that we do need it
+#this just calls a script to remove fixed alleles from out SNPs file, could or maybe should be done upstream in VCFs?
 '''
 #these are still present
 rule rm_fixed_alleles:
@@ -96,13 +84,12 @@ rule rm_fixed_alleles:
         fi
 '''  
 
-#this is in an identical format as before
-#just lats for now, to be extended with other environmental variables
-#adding sea surface temperatures - make sure to change -n parameter for bayenv command
+#currently this is just latitude and SST. Although the .ENVs file contains the min monthly max monthly temps in addition to latitude. 
+#this would need expanded to 20+ variables in future, with n PCA components so they don't correlate. 
 rule generate_env:
     input:
         #expand("{{dataset}}/populations/{{dataset}}.{lat}.txt", lat=LATS, allow_missing=True),
-        "{dataset}/{dataset}.num_pops.txt"
+        "{dataset}/{dataset}.done.txt"
     output:
         "{dataset}/{dataset}.ENVS"
     shell:
@@ -112,7 +99,7 @@ rule generate_env:
         " --sst sst/sst.mon.ltm.1991-2020.nc"
         " --o {wildcards.dataset}/{wildcards.dataset}"
 
-#we don't actually need to explicity construct the covariance matrix separately unless we want to do AUX model 
+#generate a random sample of k SNPs to build covariance matrix
 rule create_random_sample:
     input:
         "{dataset}/{dataset}.SNPS"
@@ -122,20 +109,23 @@ rule create_random_sample:
         #REMEMBER TO CHANGE K
         "python3 scripts/random_sample.py --SNPS {wildcards.dataset}/{wildcards.dataset}.SNPS --k 100000 --o {wildcards.dataset}/{wildcards.dataset}.random"
 
-#to build the covariance matrix, we can just run 
+#to build the covariance matrix, we can just run baypass on the random sample
 rule build_covar:
     input:
         "{dataset}/{dataset}.random.SNPS",
         "{dataset}/{dataset}.ENVS"
     output:
         "{dataset}/{dataset}.random_mat_omega.out"
-    #may need to adjust 
+    #may need to adjust
+    #note the number of threads as well, should probably be passed in config 
     shell: 
         "./g_baypass" 
         " -gfile {wildcards.dataset}/{wildcards.dataset}.random.SNPS"
         " -efile {wildcards.dataset}/{wildcards.dataset}.ENVS -nthreads 64"
         " -outprefix {wildcards.dataset}/{wildcards.dataset}.random"
-        
+
+#make sure everything is ready before running baypass 
+#may be rudundant. 
 checkpoint prep_baypass:
     input:
         "{dataset}/{dataset}.random_mat_omega.out",
@@ -147,8 +137,7 @@ checkpoint prep_baypass:
     shell:
         "echo 'ready' > {wildcards.dataset}/baypass_ready.txt"
 
-#test with .random for now
-#before we create chunks lets require that bayenv is ready
+#before we create chunks lets require that baypass is ready
 checkpoint create_SNPS_chunks:
     input:
         "{dataset}/{dataset}.SNPS",

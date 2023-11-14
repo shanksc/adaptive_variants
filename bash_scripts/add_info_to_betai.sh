@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#usage: INFO Beta XtX
+#usage: INFO Beta XtX AF
 #given an INFO file, merge it with betai output from baypass
 
 #info=$1
@@ -25,7 +25,7 @@ fi
 #we may want to fix this upstream in the prep_chunks.smk file, especially if we feel the need to add more info. 
 #echo $(printf "CHROMOSOME\tPOSITON\tREF\tALT\n"; cat $1) > ${1}.header
 #info should just have header now 
-paste -d '\t' ${1} ${2}.tabbed ${3}.tabbed
+paste -d '\t' ${1} ${2}.tabbed ${3}.tabbed ${4}
 
 
 

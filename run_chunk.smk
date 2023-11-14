@@ -1,4 +1,3 @@
-#this isn't ideal but preserves compatability with rest of rules
 DATASET=config['dataset']
 CHUNK=config['chunk']
 print(DATASET)
@@ -16,6 +15,6 @@ rule run_baypass:
     shell:
         "./g_baypass" 
         " -gfile {wildcards.dataset}/snp_files/{wildcards.chunk}.SNPS"
-        " -efile {wildcards.dataset}/{wildcards.dataset}.ENVS -nthreads 90"
+        " -efile {wildcards.dataset}/{wildcards.dataset}.ENVS -nthreads 64"
         " -omegafile {wildcards.dataset}/{wildcards.dataset}.random_mat_omega.out"
         " -outprefix {wildcards.dataset}/snp_files/{wildcards.chunk}"
